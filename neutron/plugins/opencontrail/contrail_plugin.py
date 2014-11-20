@@ -61,6 +61,7 @@ vnc_opts = [
                 help='Enable Contrail extensions(policy, ipam)'),
 ]
 
+
 class InvalidContrailExtensionError(exc.ServiceUnavailable):
     message = _("Invalid Contrail Extension: %(ext_name) %(ext_class)")
 
@@ -114,15 +115,14 @@ class NeutronPluginContrailCoreV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                 raise InvalidContrailExtensionError(
                     ext_name=ext_name, ext_class=ext_class)
 
-
     def __init__(self):
         """Initialize the plugin class."""
 
         super(NeutronPluginContrailCoreV2, self).__init__()
         portbindings_base.register_port_dict_function()
         #self.base_binding_dict = self._get_base_binding_dict()
-	cfg.CONF.register_opts(vnc_opts, 'APISERVER')
-	self._parse_class_args()
+        cfg.CONF.register_opts(vnc_opts, 'APISERVER')
+        self._parse_class_args()
 
     def _get_base_binding_dict(self):
         """return VIF type and details."""
