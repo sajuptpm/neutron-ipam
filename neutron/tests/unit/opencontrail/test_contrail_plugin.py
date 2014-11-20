@@ -287,8 +287,7 @@ class TestContrailPortBinding(ContrailPluginTestCase,
                               test_bindings.PortBindingsTestCase):
 
     # patch VIF_TYPES
-    portbindings.__dict__['VIF_TYPE_VROUTER'] = 'vrouter'
-    
+    portbindings.__dict__['VIF_TYPE_VROUTER'] = 'vrouter' 
     VIF_TYPE = portbindings.VIF_TYPE_VROUTER
     HAS_PORT_FILTER = True
 

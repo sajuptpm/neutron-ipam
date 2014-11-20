@@ -22,8 +22,8 @@ import copy
 import mock
 from webob import exc
 
-from neutron.plugins.opencontrail.extensions import ipam
 from neutron.openstack.common import uuidutils
+from neutron.plugins.opencontrail.extensions import ipam
 from neutron.tests.unit import test_api_v2
 from neutron.tests.unit import test_api_v2_extension
 
@@ -46,7 +46,7 @@ class IpamExtensionTestCase(test_api_v2_extension.ExtensionTestCase):
     def test_create_ipam(self):
         ipam_id = _uuid()
         data = {'ipam': {'name': 'ipam1',
-                             'mgmt': {},
+                         'mgmt': {},
                              'tenant_id': _uuid()}}
         return_value = copy.copy(data['ipam'])
         return_value.update({'id': ipam_id})
@@ -57,7 +57,7 @@ class IpamExtensionTestCase(test_api_v2_extension.ExtensionTestCase):
                             self.serialize(data),
                             content_type='application/%s' % self.fmt)
         instance.create_ipam.assert_called_with(mock.ANY,
-                                                    ipam=data)
+                                                ipam=data)
         self.assertEqual(res.status_int, exc.HTTPCreated.code)
         res = self.deserialize(res)
         self.assertIn('ipam', res)
@@ -120,7 +120,7 @@ class IpamExtensionTestCase(test_api_v2_extension.ExtensionTestCase):
     def test_ipam_delete(self):
         ipam_id = _uuid()
         res = self.api.delete(_get_path('ipams', id=ipam_id,
-                                     fmt=self.fmt))
+                                        fmt=self.fmt))
         delete_entity = getattr(self.plugin.return_value, "delete_" + 'ipam')
         delete_entity.assert_called_with(mock.ANY, ipam_id)
         self.assertEqual(res.status_int, exc.HTTPNoContent.code)
