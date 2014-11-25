@@ -72,7 +72,7 @@ class NeutronPluginContrailCoreV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
 
     supported_extension_aliases = ["security-group", "router",
                                    "port-security", "binding", "agent",
-                                   "quotas", "external-net", "ipam"]
+                                   "quotas", "external-net"]
     PLUGIN_URL_PREFIX = '/neutron'
     __native_bulk_support = False
 
