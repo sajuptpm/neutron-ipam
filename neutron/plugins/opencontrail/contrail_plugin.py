@@ -23,6 +23,7 @@ from neutron.extensions import external_net
 from neutron.extensions import portbindings
 from neutron.extensions import securitygroup
 from neutron import neutron_plugin_base_v2
+from neutron.openstack.common import importutils
 from neutron.openstack.common import jsonutils
 from neutron.openstack.common import log as logging
 from neutron.plugins.opencontrail.common import exceptions as c_exc
@@ -30,14 +31,16 @@ from neutron.plugins.opencontrail.common import exceptions as c_exc
 
 LOG = logging.getLogger(__name__)
 
-opencontrail_opts = [
-    cfg.StrOpt('api_server_ip', default='127.0.0.1',
-               help='IP address to connect to opencontrail controller'),
-    cfg.IntOpt('api_server_port', default=8082,
-               help='Port to connect to opencontrail controller'),
-]
+#opencontrail_opts = [
+#    cfg.StrOpt('api_server_ip', default='127.0.0.1',
+#               help='IP address to connect to opencontrail controller'),
+#    cfg.IntOpt('api_server_port', default=8082,
+#               help='Port to connect to opencontrail controller'),
+#    cfg.DictOpt('contrail_extensions', default={},
+#                help='Enable Contrail extensions(policy, ipam)'),
+#]
 
-cfg.CONF.register_opts(opencontrail_opts, 'CONTRAIL')
+#cfg.CONF.register_opts(opencontrail_opts, 'CONTRAIL')
 
 CONTRAIL_EXCEPTION_MAP = {
     requests.codes.not_found: c_exc.ContrailNotFoundError,
@@ -49,6 +52,19 @@ CONTRAIL_EXCEPTION_MAP = {
 }
 
 
+vnc_opts = [
+    cfg.StrOpt('api_server_ip', default='127.0.0.1',
+               help='IP address to connect to VNC controller'),
+    cfg.StrOpt('api_server_port', default='8082',
+               help='Port to connect to VNC controller'),
+    cfg.DictOpt('contrail_extensions', default={},
+                help='Enable Contrail extensions(policy, ipam)'),
+]
+
+class InvalidContrailExtensionError(exc.ServiceUnavailable):
+    message = _("Invalid Contrail Extension: %(ext_name) %(ext_class)")
+
+
 class NeutronPluginContrailCoreV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
                                   securitygroup.SecurityGroupPluginBase,
                                   portbindings_base.PortBindingBaseMixin,
@@ -56,16 +72,57 @@ class NeutronPluginContrailCoreV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
 
     supported_extension_aliases = ["security-group", "router",
                                    "port-security", "binding", "agent",
-                                   "quotas", "external-net"]
+                                   "quotas", "external-net", "ipam"]
     PLUGIN_URL_PREFIX = '/neutron'
     __native_bulk_support = False
+
+    # patch VIF_TYPES
+    portbindings.__dict__['VIF_TYPE_VROUTER'] = 'vrouter'
+    portbindings.VIF_TYPES.append(portbindings.VIF_TYPE_VROUTER)
+
+    def _parse_class_args(self):
+        """Parse the contrailplugin.ini file.
+
+        Opencontrail supports extension such as ipam, policy, these extensions
+        can be configured in the plugin configuration file as shown below.
+        Plugin then loads the specified extensions.
+        contrail_extensions=ipam:<classpath>,policy:<classpath>
+        """
+
+        contrail_extensions = cfg.CONF.APISERVER.contrail_extensions
+        # If multiple class specified for same extension, last one will win
+        # according to DictOpt behavior
+        for ext_name, ext_class in contrail_extensions.items():
+            try:
+                if not ext_class:
+                    LOG.error(_('Malformed contrail extension...'))
+                    continue
+                self.supported_extension_aliases.append(ext_name)
+                if ext_class == 'None':
+                    continue
+                ext_class = importutils.import_class(ext_class)
+                ext_instance = ext_class()
+                ext_instance.set_core(self)
+                for method in dir(ext_instance):
+                    for prefix in ['get', 'update', 'delete', 'create']:
+                        if method.startswith('%s_' % prefix):
+                            setattr(self, method,
+                                    ext_instance.__getattribute__(method))
+            except Exception:
+                LOG.exception(_("Contrail Backend Error"))
+                # Converting contrail backend error to Neutron Exception
+                raise InvalidContrailExtensionError(
+                    ext_name=ext_name, ext_class=ext_class)
+
 
     def __init__(self):
         """Initialize the plugin class."""
 
         super(NeutronPluginContrailCoreV2, self).__init__()
         portbindings_base.register_port_dict_function()
-        self.base_binding_dict = self._get_base_binding_dict()
+        #self.base_binding_dict = self._get_base_binding_dict()
+	cfg.CONF.register_opts(vnc_opts, 'APISERVER')
+	self._parse_class_args()
 
     def _get_base_binding_dict(self):
         """return VIF type and details."""
@@ -88,8 +145,8 @@ class NeutronPluginContrailCoreV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
     def _relay_request(self, url_path, data=None):
         """Send received request to api server."""
 
-        url = "http://%s:%d%s" % (cfg.CONF.CONTRAIL.api_server_ip,
-                                  cfg.CONF.CONTRAIL.api_server_port,
+        url = "http://%s:%s%s" % (cfg.CONF.APISERVER.api_server_ip,
+                                  cfg.CONF.APISERVER.api_server_port,
                                   url_path)
 
         return self._request_api_server(
